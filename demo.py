@@ -16,7 +16,7 @@ def main():
     args = parser.parse_args()
     estimator = HumanMeshEstimator2()
     estimator.run_on_video(
-        "Meta_G201_202_Columns_Tutorial_round1_rep1_tqcs_view0_us107574134.mp4"
+        "Meta_G201_202_Columns_Quickly_round10_rep2_n_view0_us1416148067.mp4"
     )
 
 if __name__=='__main__':

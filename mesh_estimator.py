@@ -235,6 +235,49 @@ class HumanMeshEstimator2(HumanMeshEstimator):
     def __init__(self) -> None:
         super().__init__()
 
+    # TODO(elvout): batching
+    def frame_dataset(
+        self,
+        frame: npt.NDArray[np.uint8],
+        frame_number: int,
+        intrinsics_matrix: npt.NDArray[np.float32] | None = None,
+    ) -> Dataset:
+        # Detect humans in the image
+        det_out = self.detector(frame)
+        det_instances = det_out["instances"]
+        valid_idx = (det_instances.pred_classes == 0) & (det_instances.scores > 0.5)
+        boxes = det_instances.pred_boxes.tensor[valid_idx].cpu().numpy()
+        bbox_scale = (boxes[:, 2:4] - boxes[:, 0:2]) / 200.0
+        bbox_center = (boxes[:, 2:4] + boxes[:, 0:2]) / 2.0
+
+        if intrinsics_matrix is None:
+            intrinsics_matrix = self.get_cam_intrinsics(frame)
+
+        return Dataset(
+            frame, bbox_center, bbox_scale, intrinsics_matrix, False, f"{frame_number}"
+        )
+
+    def process_dataset(
+        self,
+        dataset: Dataset | torch.utils.data.ConcatDataset,
+    ) -> None:
+        dataloader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=32,
+            shuffle=False,
+            num_workers=1,
+        )
+
+        for batch in tqdm.tqdm(dataloader, ncols=80):
+            batch = recursive_to(batch, self.device)
+            img_h, img_w = batch["img_size"][0]
+            with torch.no_grad():
+                out_smpl_params, out_cam, focal_length_ = self.model(batch)
+
+            output_vertices, output_joints, output_cam_trans = self.get_output_mesh(
+                out_smpl_params, out_cam, batch
+            )
+
     def process_frame(
         self,
         frame: npt.NDArray[np.uint8],
@@ -273,7 +316,20 @@ class HumanMeshEstimator2(HumanMeshEstimator):
 
     # NOTE: parent class code indicates that the model may have been trained on BGR.
     def run_on_video(self, video_path: str) -> None:
-        video_iterator = VideoIterator(video_path)
+        datasets = []
 
-        for frame_number, frame in tqdm.tqdm(video_iterator):
-            self.process_frame(frame)
+        intrinsics_matrix = np.array(
+            [
+                [749.30936467, 0.0, 439.70656733],
+                [0.0, 749.30936467, 232.33016881],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float32,
+        )
+
+        video_iterator = VideoIterator(video_path)
+        for frame_number, frame in tqdm.tqdm(video_iterator, ncols=80):
+            # self.process_frame(frame)
+            datasets.append(self.frame_dataset(frame, frame_number, intrinsics_matrix))
+
+        self.process_dataset(torch.utils.data.ConcatDataset(datasets))
