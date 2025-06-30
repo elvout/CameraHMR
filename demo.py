@@ -1,10 +1,10 @@
 import argparse
-from mesh_estimator import HumanMeshEstimator
+from mesh_estimator import HumanMeshEstimator2
 
 
 def make_parser():
     parser = argparse.ArgumentParser(description='CameraHMR Regressor')
-    parser.add_argument("--image_folder", "--image_folder", type=str, 
+    parser.add_argument("--image_folder", "--image_folder", type=str,
         help="Path to input image folder.")
     parser.add_argument("--output_folder", "--output_folder", type=str,
         help="Path to folder output folder.")
@@ -14,9 +14,10 @@ def main():
 
     parser = make_parser()
     args = parser.parse_args()
-    estimator = HumanMeshEstimator()
-    estimator.run_on_images(args.image_folder, args.output_folder)
-    
+    estimator = HumanMeshEstimator2()
+    estimator.run_on_video(
+        "Meta_G201_202_Columns_Tutorial_round1_rep1_tqcs_view0_us107574134.mp4"
+    )
+
 if __name__=='__main__':
     main()
-
