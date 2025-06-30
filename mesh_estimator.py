@@ -268,6 +268,10 @@ class HumanMeshEstimator2(HumanMeshEstimator):
             num_workers=1,
         )
 
+        frame_numbers = []
+        joints = []
+        cam_trans = []
+
         for batch in tqdm.tqdm(dataloader, ncols=80):
             batch = recursive_to(batch, self.device)
             img_h, img_w = batch["img_size"][0]
@@ -278,9 +282,21 @@ class HumanMeshEstimator2(HumanMeshEstimator):
                 out_smpl_params, out_cam, batch
             )
 
+            frame_numbers.append([int(s) for s in batch["imgname"]])
+            joints.append(output_joints.detach().cpu().numpy())
+            cam_trans.append(output_cam_trans.detach().cpu().numpy())
+
+        _fn = np.concat(frame_numbers)
+        np.save("frame_numbers.npy", _fn, allow_pickle=False)
+        _j = np.concat(joints, axis=0)
+        np.save("joints.npy", _j, allow_pickle=False)
+        _ct = np.concat(cam_trans, axis=0)
+        np.save("cam_trans.npy", _ct, allow_pickle=False)
+
     def process_frame(
         self,
         frame: npt.NDArray[np.uint8],
+        frame_number: int,
         intrinsics_matrix: npt.NDArray[np.float32] | None = None,
     ) -> None:
         # Detect humans in the image
@@ -296,7 +312,9 @@ class HumanMeshEstimator2(HumanMeshEstimator):
         # TODO(elvout): Create the dataset using all frames (e.g., ConcatDataset)
         # to parallelize inference across frames? Fill in the img_path parameter
         # with the frame number.
-        dataset = Dataset(frame, bbox_center, bbox_scale, intrinsics_matrix, False)
+        dataset = Dataset(
+            frame, bbox_center, bbox_scale, intrinsics_matrix, False, f"{frame_number}"
+        )
         dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=32,
@@ -329,7 +347,7 @@ class HumanMeshEstimator2(HumanMeshEstimator):
 
         video_iterator = VideoIterator(video_path)
         for frame_number, frame in tqdm.tqdm(video_iterator, ncols=80):
-            # self.process_frame(frame)
+            # self.process_frame(frame, frame_number, intrinsics_matrix)
             datasets.append(self.frame_dataset(frame, frame_number, intrinsics_matrix))
 
         self.process_dataset(torch.utils.data.ConcatDataset(datasets))
