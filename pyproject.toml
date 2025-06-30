@@ -11,6 +11,7 @@ dependencies = [
     "einops>=0.8.1",
     "flatten-dict>=0.4.2",
     "hydra-colorlog>=1.2.0",
+    "imageio[pyav]>=2.37.0",
     "joblib>=1.5.1",
     "jpeg4py>=0.1.4",
     "loguru>=0.7.3",
@@ -20,6 +21,7 @@ dependencies = [
     "pyrender>=0.1.45",
     "pyrootutils>=1.0.4",
     "pytorch-lightning>=2.5.2",
+    "pyu",
     "rich>=14.0.0",
     "scikit-image>=0.25.2",
     "setuptools<81",
@@ -34,3 +36,4 @@ dependencies = [
 [tool.uv.sources]
 chumpy = { git = "https://github.com/motion-synthesis-for-biomed-research/chumpy", rev = "38ec4ee" }
 detectron2 = { git = "https://github.com/facebookresearch/detectron2.git" }
+pyu = { git = "https://github.com/elvout/pyu", rev = "c727fd7" }
