@@ -1,5 +1,6 @@
 import os
 from glob import glob
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -260,6 +261,7 @@ class HumanMeshEstimator2(HumanMeshEstimator):
     def process_dataset(
         self,
         dataset: Dataset | torch.utils.data.ConcatDataset,
+        output_folder: Path,
     ) -> None:
         dataloader = torch.utils.data.DataLoader(
             dataset,
@@ -286,12 +288,14 @@ class HumanMeshEstimator2(HumanMeshEstimator):
             joints.append(output_joints.detach().cpu().numpy())
             cam_trans.append(output_cam_trans.detach().cpu().numpy())
 
+        output_folder.mkdir(parents=True, exist_ok=True)
+
         _fn = np.concat(frame_numbers)
-        np.save("frame_numbers.npy", _fn, allow_pickle=False)
+        np.save(output_folder / "frame_numbers.npy", _fn, allow_pickle=False)
         _j = np.concat(joints, axis=0)
-        np.save("joints.npy", _j, allow_pickle=False)
+        np.save(output_folder / "joints.npy", _j, allow_pickle=False)
         _ct = np.concat(cam_trans, axis=0)
-        np.save("cam_trans.npy", _ct, allow_pickle=False)
+        np.save(output_folder / "cam_trans.npy", _ct, allow_pickle=False)
 
     def process_frame(
         self,
@@ -333,7 +337,14 @@ class HumanMeshEstimator2(HumanMeshEstimator):
             )
 
     # NOTE: parent class code indicates that the model may have been trained on BGR.
-    def run_on_video(self, video_path: str) -> None:
+    def run_on_video(self, video_path: str | Path) -> None:
+        if not isinstance(video_path, Path):
+            video_path = Path(video_path)
+        output_folder = Path(f"results/{video_path.stem}")
+        if output_folder.exists():
+            # Assume results are valid
+            return
+
         datasets = []
 
         intrinsics_matrix = np.array(
@@ -350,4 +361,7 @@ class HumanMeshEstimator2(HumanMeshEstimator):
             # self.process_frame(frame, frame_number, intrinsics_matrix)
             datasets.append(self.frame_dataset(frame, frame_number, intrinsics_matrix))
 
-        self.process_dataset(torch.utils.data.ConcatDataset(datasets))
+        self.process_dataset(
+            torch.utils.data.ConcatDataset(datasets),
+            output_folder,
+        )
