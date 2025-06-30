@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 
-from timm.models.layers import drop_path, to_2tuple, trunc_normal_
+from timm.layers import drop_path, to_2tuple, trunc_normal_
 
 def vit():
     return ViT(
@@ -51,7 +51,7 @@ def get_abs_pos(abs_pos, h, w, ori_h, ori_w, has_cls_token=True):
 
     else:
         new_abs_pos = abs_pos
-    
+
     if cls_token is not None:
         new_abs_pos = torch.cat([cls_token, new_abs_pos], dim=1)
     return new_abs_pos
@@ -65,7 +65,7 @@ class DropPath(nn.Module):
 
     def forward(self, x):
         return drop_path(x, self.drop_prob, self.training)
-    
+
     def extra_repr(self):
         return 'p={}'.format(self.drop_prob)
 
@@ -127,12 +127,12 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, 
-                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None,
+                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU,
                  norm_layer=nn.LayerNorm, attn_head_dim=None
                  ):
         super().__init__()
-        
+
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
@@ -212,7 +212,7 @@ class ViT(nn.Module):
     def __init__(self,
                  img_size=224, patch_size=16, in_chans=3, num_classes=80, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., hybrid_backbone=None, norm_layer=None, use_checkpoint=False, 
+                 drop_path_rate=0., hybrid_backbone=None, norm_layer=None, use_checkpoint=False,
                  frozen_stages=-1, ratio=1, last_norm=True,
                  patch_padding='pad', freeze_attn=False, freeze_ffn=False,
                  ):

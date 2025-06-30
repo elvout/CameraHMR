@@ -55,7 +55,8 @@ class HumanMeshEstimator:
 
     def init_cam_model(self):
         model = FLNet()
-        checkpoint = torch.load(CAM_MODEL_CKPT)['state_dict']
+        torch.serialization.add_safe_globals([yacs.config.CfgNode])
+        checkpoint = torch.load(CAM_MODEL_CKPT)["state_dict"]
         model.load_state_dict(checkpoint)
         model.eval()
         return model

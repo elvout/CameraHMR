@@ -214,7 +214,7 @@ def rotation_matrix_to_quaternion(rotation_matrix, eps=1e-6):
                     t2_rep * mask_c2 + t3_rep * mask_c3)  # noqa
     q *= 0.5
     return q
-    
+
 def aa_to_rotmat(theta: torch.Tensor):
     """
     Convert axis-angle representation to rotation matrix.
@@ -271,7 +271,7 @@ def rot6d_to_rotmat(x: torch.Tensor) -> torch.Tensor:
     a2 = x[:, :, 1]
     b1 = F.normalize(a1)
     b2 = F.normalize(a2 - torch.einsum('bi,bi->b', b1, a2).unsqueeze(-1) * b1)
-    b3 = torch.cross(b1, b2)
+    b3 = torch.linalg.cross(b1, b2)
     return torch.stack((b1, b2, b3), dim=-1)
 
 def perspective_projection(points: torch.Tensor,
