@@ -3,6 +3,7 @@ from glob import glob
 from pathlib import Path
 
 import cv2
+import imageio.v3 as iio
 import numpy as np
 import numpy.typing as npt
 import smplx
@@ -236,6 +237,30 @@ class HumanMeshEstimator2(HumanMeshEstimator):
     def __init__(self) -> None:
         super().__init__()
 
+    def convert_to_full_img_cam(
+        self, pare_cam, bbox_height, bbox_center, int_cx, int_cy, focal_length
+    ):
+        s, tx, ty = pare_cam[:, 0], pare_cam[:, 1], pare_cam[:, 2]
+        tz = 2.0 * focal_length / (bbox_height * s)
+        cx = 2.0 * (bbox_center[:, 0] - int_cx) / (s * bbox_height)
+        cy = 2.0 * (bbox_center[:, 1] - int_cy) / (s * bbox_height)
+        cam_t = torch.stack([tx + cx, ty + cy, tz], dim=-1)
+        return cam_t
+
+    def get_output_mesh(self, params, pred_cam, batch):
+        smpl_output = self.smpl_model(**{k: v.float() for k, v in params.items()})
+        pred_keypoints_3d = smpl_output.joints
+        pred_vertices = smpl_output.vertices
+        cam_trans = self.convert_to_full_img_cam(
+            pare_cam=pred_cam,
+            bbox_height=batch["box_size"],
+            bbox_center=batch["box_center"],
+            int_cx=batch["cam_int"][:, 0, 2],
+            int_cy=batch["cam_int"][:, 1, 2],
+            focal_length=batch["cam_int"][:, 0, 0],
+        )
+        return pred_vertices, pred_keypoints_3d, cam_trans
+
     # TODO(elvout): batching
     def frame_dataset(
         self,
@@ -302,7 +327,7 @@ class HumanMeshEstimator2(HumanMeshEstimator):
         frame: npt.NDArray[np.uint8],
         frame_number: int,
         intrinsics_matrix: npt.NDArray[np.float32] | None = None,
-    ) -> None:
+    ) -> npt.NDArray[np.uint8]:
         # Detect humans in the image
         det_out = self.detector(frame)
         det_instances = det_out["instances"]
@@ -336,6 +361,28 @@ class HumanMeshEstimator2(HumanMeshEstimator):
                 out_smpl_params, out_cam, batch
             )
 
+            # Render overlay
+            focal_length = (focal_length_[0], focal_length_[0])
+            pred_vertices_array = (
+                (output_vertices + output_cam_trans.unsqueeze(1)).detach().cpu().numpy()
+            )
+            renderer = Renderer(
+                focal_length=focal_length[0],
+                img_w=img_w,
+                img_h=img_h,
+                cx=batch["cam_int"][0, 0, 2],
+                cy=batch["cam_int"][0, 1, 2],
+                faces=self.smpl_model.faces,
+                same_mesh_color=True,
+            )
+            front_view = renderer.render_front_view(
+                pred_vertices_array, bg_img_rgb=frame.copy()
+            )
+            final_img = front_view
+            # Write overlay
+            renderer.delete()
+        return final_img
+
     # NOTE: parent class code indicates that the model may have been trained on BGR.
     def run_on_video(self, video_path: str | Path) -> None:
         if not isinstance(video_path, Path):
@@ -365,3 +412,18 @@ class HumanMeshEstimator2(HumanMeshEstimator):
             torch.utils.data.ConcatDataset(datasets),
             output_folder,
         )
+
+        # Debug visualization
+        if False:
+            video_iterator.reset(0)
+            with iio.imopen(
+                f"results/{video_path.stem}/vis.mp4", "w", plugin="pyav"
+            ) as out_vid:
+                out_vid.init_video_stream("h264", fps=30)
+
+                for frame_number, frame in tqdm.tqdm(video_iterator, ncols=80):
+                    if frame_number > 60:
+                        continue
+                    out_vid.write_frame(
+                        self.process_frame(frame, frame_number, intrinsics_matrix)
+                    )

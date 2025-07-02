@@ -24,7 +24,8 @@ class CameraHMR(pl.LightningModule):
         cam_intrinsics = batch['cam_int']
         fl_h = cam_intrinsics[:, 0, 0]
 
-        bbox_info = torch.stack([cx - img_w / 2., cy - img_h / 2., b], dim=-1)
+        # bbox_info = torch.stack([cx - img_w / 2., cy - img_h / 2., b], dim=-1)
+        bbox_info = torch.stack([cx - cam_intrinsics[:, 0, 2], cy - cam_intrinsics[:, 1, 2], b], dim=-1)
         bbox_info[:, :2] /= cam_intrinsics[:, 0, 0].unsqueeze(-1)
         bbox_info[:, 2] /= cam_intrinsics[:, 0, 0]
         bbox_info = bbox_info.float()
