@@ -62,6 +62,55 @@ def resize_image(img, target_size):
     return aspect_ratio, final_img
 
 
+class Context:
+    def __init__(self, trial_base_name: str) -> None:
+        """
+        Semantic parsing of the Freeman trajectory naming convention.
+
+        General form:
+        Meta_G###_###_{obstacle}_{modus}_round##_rep#_{codes}
+        """
+
+        self.trial_base_name: str
+        self.session: str
+        # TODO(elvout): switch to enums?
+        self.obstacle: str
+        self.modus: str
+        self.round: int
+        self.codes: str
+        ###############################################################
+
+        self.trial_base_name = trial_base_name
+        tokens = trial_base_name.split("_")
+        self.session = tokens[1] + "_" + tokens[2]
+        self.obstacle = tokens[3]
+        self.modus = tokens[4]
+        self.round = int(tokens[5][5:])
+        self.codes = tokens[7]
+
+
+class VideoContext(Context):
+    def __init__(self, name: str) -> None:
+        """
+        Semantic parsing of the Freeman trajectory naming convention, extended
+        for video views.
+
+        General form:
+        Meta_G###_###_{obstacle}_{modus}_round##_rep#_{codes}_view#_us##########
+        """
+        super().__init__(name[: name.find("_view")])
+
+        self.view: int
+        self.start_time: float
+        ###############################################################
+
+        tokens = name.split("_")
+        assert tokens[8].startswith("view")
+        self.view = int(tokens[8][4:])
+        assert tokens[9].startswith("us")
+        self.start_time = float(tokens[9][2:]) * 1e-6
+
+
 class HumanMeshEstimator:
     def __init__(self, smpl_model_path=SMPL_MODEL_PATH, threshold=0.25):
         self.device = (
@@ -262,6 +311,7 @@ class HumanMeshEstimator2(HumanMeshEstimator):
         return pred_vertices, pred_keypoints_3d, cam_trans
 
     # TODO(elvout): batching
+    # https://github.com/facebookresearch/detectron2/issues/282
     def frame_dataset(
         self,
         frame: npt.NDArray[np.uint8],
@@ -336,6 +386,9 @@ class HumanMeshEstimator2(HumanMeshEstimator):
         bbox_scale = (boxes[:, 2:4] - boxes[:, 0:2]) / 200.0
         bbox_center = (boxes[:, 2:4] + boxes[:, 0:2]) / 2.0
 
+        # with open("results/scores.txt", "a") as fout:
+        #     fout.write(f"{frame_number}: {det_instances.scores[valid_idx]}\n{bbox_center}\n")
+
         if intrinsics_matrix is None:
             intrinsics_matrix = self.get_cam_intrinsics(frame)
         # TODO(elvout): Create the dataset using all frames (e.g., ConcatDataset)
@@ -393,20 +446,16 @@ class HumanMeshEstimator2(HumanMeshEstimator):
             return
 
         datasets = []
-
-        intrinsics_matrix = np.array(
-            [
-                [749.30936467, 0.0, 439.70656733],
-                [0.0, 749.30936467, 232.33016881],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=np.float32,
+        context = VideoContext(video_path.stem)
+        intrinsics_matrix = np.load(
+            f"freeman-intrinsics/{context.session}_view{context.view}_undistorted_calib.npy"
         )
 
         video_iterator = VideoIterator(video_path)
         for frame_number, frame in tqdm.tqdm(video_iterator, ncols=80):
-            # self.process_frame(frame, frame_number, intrinsics_matrix)
-            datasets.append(self.frame_dataset(frame, frame_number, intrinsics_matrix))
+            datasets.append(
+                self.frame_dataset(frame[:, :, ::-1], frame_number, intrinsics_matrix)
+            )
 
         self.process_dataset(
             torch.utils.data.ConcatDataset(datasets),
@@ -416,14 +465,17 @@ class HumanMeshEstimator2(HumanMeshEstimator):
         # Debug visualization
         if False:
             video_iterator.reset(0)
+            output_folder.mkdir(parents=True, exist_ok=True)
             with iio.imopen(
-                f"results/{video_path.stem}/vis.mp4", "w", plugin="pyav"
+                str(output_folder / "vis.mp4"), "w", plugin="pyav"
             ) as out_vid:
                 out_vid.init_video_stream("h264", fps=30)
 
                 for frame_number, frame in tqdm.tqdm(video_iterator, ncols=80):
-                    if frame_number > 60:
-                        continue
+                    # if frame_number > 60:
+                    #     continue
                     out_vid.write_frame(
-                        self.process_frame(frame, frame_number, intrinsics_matrix)
+                        self.process_frame(
+                            frame[:, :, ::-1], frame_number, intrinsics_matrix
+                        )
                     )
